@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Full-Length Capture",
+  "version": "4.1.1",
+  "description": "Capture the entire length of anything scrollable on a page — main window, inner scroll panes, shadow DOM, same-origin iframes, and nested cross-origin readers — as one PDF (real text where possible, image otherwise).",
+  "permissions": [
+    "debugger",
+    "downloads",
+    "storage",
+    "scripting",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background/sw.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "Full-Length Capture",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/viewer/viewer.html", "src/viewer/viewer.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

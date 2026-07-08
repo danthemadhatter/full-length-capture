@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>Full-Length Capture</title>
+</head>
+<body>
+  <header>
+    <div class="mark">⤓</div>
+    <div>
+      <h1>Full-Length Capture</h1>
+      <p class="sub">Capture the entire length of anything scrollable</p>
+    </div>
+  </header>
+
+  <div class="badge-row">
+    <span class="badge" id="surfaceBadge">detecting…</span>
+    <span class="ver" id="ver"></span>
+  </div>
+
+  <div class="actions">
+    <button id="btnScroll" class="primary">📸 Scroll-capture → PDF</button>
+    <p class="tip">Click, then just scroll the area top-to-bottom and hit <b>Done</b>. Plain screenshots — works on anything you can see, no debugger banner.</p>
+    <details class="more">
+      <summary>Other capture modes</summary>
+      <button id="btnAuto" class="ghost">Capture full page (auto)</button>
+      <button id="btnPane" class="ghost">Pick a pane…</button>
+      <button id="btnRecord" class="ghost">Record while I scroll…</button>
+      <button id="btnSource" class="ghost hidden">Download original PDF</button>
+    </details>
+  </div>
+
+  <details class="opts">
+    <summary>Options</summary>
+    <label class="row">
+      <span>Print styling</span>
+      <select id="mediaMode">
+        <option value="screen" selected>Screen (as displayed)</option>
+        <option value="print">Print stylesheet</option>
+      </select>
+    </label>
+  </details>
+
+  <div id="consent" class="consent hidden">
+    <label class="row check">
+      <input type="checkbox" id="consentChk" />
+      <span>I'm entitled to this content and accept it will be captured as images for my personal use. This does not bypass any protection; DRM-protected regions may render black.</span>
+    </label>
+  </div>
+
+  <div id="status" class="status">Ready</div>
+
+  <p class="warn" id="warn">
+    <b>Scroll-capture</b> is the reliable one — plain screenshots, no debugger, no banner; it captures whatever is visible (even embedded readers). The <b>Other capture modes</b> use Chrome's debugger (shows a “started debugging this browser” banner, and you must close DevTools on the tab first).
+  </p>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
