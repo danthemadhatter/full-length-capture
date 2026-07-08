@@ -1,23 +1,35 @@
-// scrollcap.js — manual scroll-capture UI (content script, no debugger).
+// scrollcap.js — the in-page half of scroll-capture (content script, no debugger).
 //
-// Shows a small REC bar, samples the visible tab on a timer while you scroll,
-// and reports the capture region's rect so the service worker can crop + stitch.
-// Sampling on a timer (not scroll events) is what makes this work on cross-origin
-// panes: the top page never sees their scroll events, but a screenshot still sees
-// their pixels.
+// Samples the visible tab on a timer while you scroll, and reports the capture
+// region's rect so the service worker can crop + stitch. Sampling on a timer
+// (not scroll events) is what makes this work on cross-origin panes: the top
+// page never sees their scroll events, but a screenshot still sees their pixels.
+//
+// The controls (shot count, Change area, Done, Cancel) live in the toolbar
+// action's popup (src/popup/), NOT here. A control bar injected into the page
+// would need to hide itself before every single screenshot and reappear after —
+// at ~3 captures/sec for the whole scroll session, that's a visible strobe with
+// no way to shorten it away (the human eye perceives on/off cycling far below
+// that rate). The popup is rendered by the browser's own chrome outside the
+// page's surface, so chrome.tabs.captureVisibleTab structurally never sees it —
+// nothing to hide, so nothing to flicker. The service worker attaches that
+// popup to this tab only once a capture starts (see sw.js), so a plain click
+// starts a capture and a second click — once the popup is attached — opens
+// the controls instead.
 
 (() => {
   if (window.__flcScrollcap) { return; } // already active
   window.__flcScrollcap = true;
 
   const MSG = {
-    SCROLLCAP_BEGIN: "SCROLLCAP_BEGIN", SCROLLCAP_FRAME: "SCROLLCAP_FRAME",
-    SCROLLCAP_DONE: "SCROLLCAP_DONE", SCROLLCAP_CANCEL: "SCROLLCAP_CANCEL",
+    SCROLLCAP_FRAME: "SCROLLCAP_FRAME", SCROLLCAP_RESET: "SCROLLCAP_RESET",
+    SCROLLCAP_ENTER_PICK: "SCROLLCAP_ENTER_PICK",
+    SCROLLCAP_PAUSE: "SCROLLCAP_PAUSE", SCROLLCAP_RESUME: "SCROLLCAP_RESUME", SCROLLCAP_STOP: "SCROLLCAP_STOP",
   };
   const send = (m) => new Promise((r) => { try { chrome.runtime.sendMessage(m, (resp) => { void chrome.runtime.lastError; r(resp); }); } catch (e) { r(null); } });
 
   let lockedEl = null;   // element to crop to, or null = whole viewport
-  let outline, bar, timer, picking = false, busy = false, frames = 0, started = false;
+  let outline, timer, picking = false, busy = false;
 
   // ---- region selection ----
   function autoRegion() {
@@ -60,7 +72,8 @@
     Object.assign(outline.style, { left: r.x + "px", top: r.y + "px", width: r.width + "px", height: r.height + "px", display: "block" });
   }
   // Show the region outline briefly, then hide it — a PERSISTENT outline would be
-  // baked into every screenshot (those orange lines). We only flash it.
+  // baked into every screenshot (those orange lines). We only flash it, once, at
+  // the start and after picking a new area — never on a per-capture cadence.
   let flashTimer = null;
   function flashOutline(ms) {
     drawOutline();
@@ -68,37 +81,17 @@
     flashTimer = setTimeout(() => { if (outline) outline.style.display = "none"; }, ms || 1200);
   }
 
-  // ---- REC bar ----
-  function makeBar() {
-    bar = document.createElement("div");
-    bar.className = "flc-recpanel";
-    bar.style.pointerEvents = "auto";
-    bar.innerHTML =
-      '<span class="flc-dot"></span><span id="flc-sc-count">0 shots</span>' +
-      '<button id="flc-sc-area">Change area</button>' +
-      '<button id="flc-sc-done">Done — make PDF</button>' +
-      '<button id="flc-sc-cancel">Cancel</button>';
-    document.documentElement.appendChild(bar);
-    bar.querySelector("#flc-sc-area").addEventListener("click", startPick);
-    bar.querySelector("#flc-sc-done").addEventListener("click", finish);
-    bar.querySelector("#flc-sc-cancel").addEventListener("click", cancel);
-  }
-  function setCount(n) { const c = bar && bar.querySelector("#flc-sc-count"); if (c) c.textContent = n + " shots"; }
-
   // ---- capture loop ----
   async function tick() {
     if (busy || picking) return;
     busy = true;
-    // Hide our own overlays so they're never captured into the screenshot.
+    // The outline only needs hiding on the rare tick where it's still mid-flash.
     const outWasShown = outline && outline.style.display !== "none";
     if (outline) outline.style.display = "none";
-    if (bar) bar.style.visibility = "hidden";
     try {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const resp = await send({ type: MSG.SCROLLCAP_FRAME, rect: regionRect(), innerWidth, innerHeight, dpr: window.devicePixelRatio || 1 });
-      if (resp && typeof resp.frames === "number") { frames = resp.frames; setCount(frames); }
+      await send({ type: MSG.SCROLLCAP_FRAME, rect: regionRect(), innerWidth, innerHeight, dpr: window.devicePixelRatio || 1 });
     } finally {
-      if (bar) bar.style.visibility = "visible";
       if (outWasShown && outline) outline.style.display = "block";
       busy = false;
     }
@@ -108,7 +101,7 @@
   let hoverEl = null;
   const onMove = (e) => {
     const stack = document.elementsFromPoint(e.clientX, e.clientY);
-    hoverEl = stack.find((el) => el !== outline && el !== bar && !bar.contains(el)) || null;
+    hoverEl = stack.find((el) => el !== outline) || null;
     if (hoverEl) { const r = hoverEl.getBoundingClientRect();
       Object.assign(outline.style, { left: Math.max(0, r.left) + "px", top: Math.max(0, r.top) + "px", width: r.width + "px", height: r.height + "px", display: "block" }); }
   };
@@ -116,6 +109,9 @@
     e.preventDefault(); e.stopPropagation();
     lockedEl = hoverEl && hoverEl !== document.body && hoverEl !== document.documentElement ? hoverEl : null;
     stopPick();
+    // A different region means every earlier screenshot is of the WRONG
+    // content — it can never be stitched with what comes next, so start over.
+    send({ type: MSG.SCROLLCAP_RESET });
   };
   const onPickKey = (e) => { if (e.key === "Escape") stopPick(); };
   function startPick() {
@@ -136,10 +132,7 @@
 
   // ---- lifecycle ----
   function begin() {
-    if (started) return;
-    started = true;
     lockedEl = autoRegion();
-    makeBar();
     flashOutline(1400); // show the region briefly; not baked into captures
     tick(); // grab the starting view immediately
     timer = setInterval(tick, 360);
@@ -148,23 +141,16 @@
     clearInterval(timer);
     stopPick();
     if (outline && outline.parentNode) outline.remove();
-    if (bar && bar.parentNode) bar.remove();
     window.__flcScrollcap = false;
-  }
-  async function finish() {
-    clearInterval(timer);
-    if (bar) bar.querySelector("#flc-sc-done").textContent = "Building…";
-    await send({ type: MSG.SCROLLCAP_DONE });
-    teardown();
-  }
-  async function cancel() {
-    await send({ type: MSG.SCROLLCAP_CANCEL });
-    teardown();
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === MSG.SCROLLCAP_BEGIN) begin();
+    if (!msg) return;
+    if (msg.type === MSG.SCROLLCAP_ENTER_PICK) startPick();
+    if (msg.type === MSG.SCROLLCAP_PAUSE) clearInterval(timer);
+    if (msg.type === MSG.SCROLLCAP_RESUME) timer = setInterval(tick, 360);
+    if (msg.type === MSG.SCROLLCAP_STOP) teardown();
   });
-  // The SW injects this script and then sends BEGIN; if BEGIN already raced, start.
+
   begin();
 })();

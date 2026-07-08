@@ -1,60 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <link rel="stylesheet" href="popup.css" />
-  <title>Full-Length Capture</title>
+<meta charset="utf-8">
+<title>Full-Length Capture</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 14px; width: 240px;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1c1c22; color: #eaeaf0;
+  }
+  h1 { font-size: 13px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #ff7a18; animation: pulse 1.2s infinite; flex: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  #count { color: #b7b7c4; margin: 0 0 12px; }
+  button {
+    display: block; width: 100%; margin-bottom: 8px;
+    background: #2a2a33; color: #eaeaf0; border: 1px solid #3a3a45;
+    border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #34343f; }
+  button:disabled { opacity: .5; cursor: default; }
+  #done { background: #ff7a18; color: #1c1c22; border-color: #ff7a18; }
+  #done:hover { background: #ff8a35; }
+  #status { margin-top: 8px; color: #b7b7c4; min-height: 18px; font-size: 12px; }
+  #status.error { color: #ff8f8f; }
+</style>
 </head>
 <body>
-  <header>
-    <div class="mark">⤓</div>
-    <div>
-      <h1>Full-Length Capture</h1>
-      <p class="sub">Capture the entire length of anything scrollable</p>
-    </div>
-  </header>
-
-  <div class="badge-row">
-    <span class="badge" id="surfaceBadge">detecting…</span>
-    <span class="ver" id="ver"></span>
-  </div>
-
-  <div class="actions">
-    <button id="btnScroll" class="primary">📸 Scroll-capture → PDF</button>
-    <p class="tip">Click, then just scroll the area top-to-bottom and hit <b>Done</b>. Plain screenshots — works on anything you can see, no debugger banner.</p>
-    <details class="more">
-      <summary>Other capture modes</summary>
-      <button id="btnAuto" class="ghost">Capture full page (auto)</button>
-      <button id="btnPane" class="ghost">Pick a pane…</button>
-      <button id="btnRecord" class="ghost">Record while I scroll…</button>
-      <button id="btnSource" class="ghost hidden">Download original PDF</button>
-    </details>
-  </div>
-
-  <details class="opts">
-    <summary>Options</summary>
-    <label class="row">
-      <span>Print styling</span>
-      <select id="mediaMode">
-        <option value="screen" selected>Screen (as displayed)</option>
-        <option value="print">Print stylesheet</option>
-      </select>
-    </label>
-  </details>
-
-  <div id="consent" class="consent hidden">
-    <label class="row check">
-      <input type="checkbox" id="consentChk" />
-      <span>I'm entitled to this content and accept it will be captured as images for my personal use. This does not bypass any protection; DRM-protected regions may render black.</span>
-    </label>
-  </div>
-
-  <div id="status" class="status">Ready</div>
-
-  <p class="warn" id="warn">
-    <b>Scroll-capture</b> is the reliable one — plain screenshots, no debugger, no banner; it captures whatever is visible (even embedded readers). The <b>Other capture modes</b> use Chrome's debugger (shows a “started debugging this browser” banner, and you must close DevTools on the tab first).
-  </p>
-
+  <h1><span class="dot"></span>Capturing…</h1>
+  <p id="count">0 shots</p>
+  <button id="area">Change area</button>
+  <button id="done">Done — make PDF</button>
+  <button id="cancel">Cancel</button>
+  <p id="status"></p>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

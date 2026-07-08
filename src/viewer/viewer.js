@@ -24,13 +24,7 @@ async function load() {
   objUrl = URL.createObjectURL(rec.blob);
 
   const sizeMb = (meta.size || rec.blob.size) / (1024 * 1024);
-  $("meta").textContent =
-    `${meta.pages ? meta.pages + " page(s) · " : ""}${meta.strategy || ""}${meta.strategy ? " · " : ""}${sizeMb.toFixed(1)} MB`;
-  if (meta.partial) {
-    const w = $("warnbar");
-    w.style.display = "block";
-    w.textContent = `Heads up: this looks like a PARTIAL capture (~${Math.round((meta.coverage || 0) * 100)}% of the page via ${meta.strategy}). The page may use a capture method this tool can't fully reach — try "Pick a pane" or "Record while I scroll".`;
-  }
+  $("meta").textContent = `1 continuous page · ${sizeMb.toFixed(1)} MB`;
 
   const emb = document.createElement("embed");
   emb.type = "application/pdf";

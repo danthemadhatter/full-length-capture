@@ -1,71 +1,35 @@
 // messages.js — single source of truth for the message protocol between the
-// four execution contexts (popup, content script, service worker, viewer tab).
+// three execution contexts (content script, service worker, viewer tab).
 //
 // Every message is { type: MSG.X, ...payload }. Keeping the constants here means
 // a typo is a ReferenceError at load time instead of a silently-dropped message.
 
 export const MSG = {
-  // popup -> service worker
-  DETECT_SURFACE: "DETECT_SURFACE", // { tabId } -> { surface, flags }
-  START_CAPTURE: "START_CAPTURE", // { tabId, mode, target?, options } mode: "auto"|"pane"|"record"|"source"
-  CANCEL_CAPTURE: "CANCEL_CAPTURE", // { tabId }
+  // content script -> service worker (the content script self-starts on
+  // injection — no "begin" message needed, chrome.scripting.executeScript
+  // running the file IS the start signal)
+  SCROLLCAP_FRAME: "SCROLLCAP_FRAME", // { rect, innerWidth, innerHeight, dpr } -> { ok, frames }
+  SCROLLCAP_RESET: "SCROLLCAP_RESET", // "Change area" picked a new region — discard frames captured so far
 
-  // popup -> content script (relayed by SW via chrome.tabs.sendMessage)
-  BEGIN_PICK: "BEGIN_PICK", // { mode: "pane"|"record" }
+  // side panel -> service worker. The controls live in the side panel (not the
+  // page), so these carry an explicit tabId — a side panel isn't "attached" to
+  // a tab the way a content script's sender.tab is.
+  SCROLLCAP_DONE: "SCROLLCAP_DONE", // { tabId } -> stitch + save -> { ok, error? }
+  SCROLLCAP_CANCEL: "SCROLLCAP_CANCEL", // { tabId } -> abandon the session
+  SCROLLCAP_CHANGE_AREA: "SCROLLCAP_CHANGE_AREA", // { tabId } -> tell the content script to enter pick mode
 
-  // content script -> service worker
-  PANE_PICKED: "PANE_PICKED", // { target } target = { domPath, rect, docMetrics, framePath }
-  RECORD_RESULT: "RECORD_RESULT", // { target }
-  PICK_CANCELLED: "PICK_CANCELLED", // {}
+  // service worker -> content script
+  SCROLLCAP_ENTER_PICK: "SCROLLCAP_ENTER_PICK", // enter "click to pick a region" mode
+  SCROLLCAP_PAUSE: "SCROLLCAP_PAUSE", // stop sampling WITHOUT tearing down — stitching is about to read the frame list, so nothing may be appended to it mid-read
+  SCROLLCAP_RESUME: "SCROLLCAP_RESUME", // stitching failed — resume sampling so the user can keep scrolling and retry
+  SCROLLCAP_STOP: "SCROLLCAP_STOP", // stitching succeeded (or cancelled) — full teardown
 
-  // service worker -> popup (broadcast; popup listens while open)
-  PROGRESS: "PROGRESS", // { phase, note, done?, total?, pct? }
-  COMPLETE: "COMPLETE", // { viewerUrl?, kind, bytes, pages }
-  ERROR: "ERROR", // { error }
+  // service worker -> side panel (broadcast; the panel filters by its own tabId)
+  SCROLLCAP_COUNT: "SCROLLCAP_COUNT", // { tabId, frames }
+  SCROLLCAP_BUILDING: "SCROLLCAP_BUILDING", // { tabId } — stitching in progress
+  SCROLLCAP_FAILED: "SCROLLCAP_FAILED", // { tabId, error }
 
-  // service worker <-> viewer tab
-  GET_CAPTURE: "GET_CAPTURE", // viewer -> SW { key } -> { ok, meta }  (blob comes from IDB directly)
-  DOWNLOAD_DONE: "DOWNLOAD_DONE", // viewer -> SW { key }
-
-  // Manual scroll-capture (debugger-free: plain tab screenshots you drive by
-  // scrolling). popup -> SW starts it; content <-> SW stream frames; then stitch.
-  SCROLLCAP_START: "SCROLLCAP_START", // popup -> SW { tabId }
-  SCROLLCAP_BEGIN: "SCROLLCAP_BEGIN", // SW -> content (start the REC bar)
-  SCROLLCAP_FRAME: "SCROLLCAP_FRAME", // content -> SW { offset, rect, innerWidth, clientHeight, scrollHeight, dpr } -> { ok, frames }
-  SCROLLCAP_DONE: "SCROLLCAP_DONE", // content -> SW (stitch + save)
-  SCROLLCAP_CANCEL: "SCROLLCAP_CANCEL", // content -> SW
-};
-
-// Capture phases, used for progress reporting and resumable state.
-export const PHASE = {
-  CLASSIFY: "classify",
-  ATTACH: "attach",
-  SETTLE: "settle",
-  FLATTEN: "flatten",
-  MEASURE: "measure",
-  RENDER: "render",
-  SCROLL: "scroll",
-  PAGETURN: "pageturn",
-  ASSEMBLE: "assemble",
-  HANDOFF: "handoff",
-  DONE: "done",
-};
-
-// Strategy identifiers (rungs of the ladder).
-export const STRATEGY = {
-  SOURCE_BYTES: "sourceBytes", // rung 0
-  PRINT_TO_PDF: "printToPdf", // rung 1
-  SCROLL_STITCH: "scrollStitch", // rung 2
-  PAGE_TURN: "pageTurnReader", // rung 3
-  WHOLE_PAGE: "wholePage", // rung 4
-};
-
-// Surface classes the ladder branches on.
-export const SURFACE = {
-  PDF: "pdf",
-  VIRTUALIZED: "virtualized",
-  WIKIPEDIA: "wikipedia",
-  D2L: "d2l",
-  VITALSOURCE: "vitalsource",
-  GENERIC: "generic",
+  // viewer tab <-> service worker
+  GET_CAPTURE: "GET_CAPTURE", // { key } -> { ok, meta } (the blob itself comes from IndexedDB directly)
+  DOWNLOAD_DONE: "DOWNLOAD_DONE", // { key }
 };

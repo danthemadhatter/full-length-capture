@@ -1,10 +1,7 @@
-// state.js — persistence for the service worker.
+// state.js — IndexedDB persistence for the finished capture Blob.
 //
-//  - chrome.storage.local  : small, resumable progress + settings (survives an
-//    idle-shutdown; not the force-detach itself but the record of where we were)
-//  - IndexedDB             : the final (possibly tens-of-MB) output Blob. The SW
-//    cannot URL.createObjectURL, so we stash the Blob here and the viewer tab
-//    reads it back and mints the object URL / triggers the download.
+// The service worker cannot URL.createObjectURL, so we stash the Blob here and
+// the viewer tab reads it back and mints the object URL / triggers the download.
 
 const DB_NAME = "flc";
 const STORE = "blobs";
@@ -53,26 +50,4 @@ export async function deleteBlob(key) {
     tx.onerror = resolve;
   });
   db.close();
-}
-
-// ---- small progress/settings via chrome.storage.local ----
-
-export function saveProgress(tabId, obj) {
-  return chrome.storage.local.set({ ["progress_" + tabId]: obj });
-}
-export async function loadProgress(tabId) {
-  const k = "progress_" + tabId;
-  const r = await chrome.storage.local.get(k);
-  return r[k] || null;
-}
-export function clearProgress(tabId) {
-  return chrome.storage.local.remove("progress_" + tabId);
-}
-
-export async function loadSettings() {
-  const r = await chrome.storage.local.get("settings");
-  return r.settings || {};
-}
-export function saveSettings(settings) {
-  return chrome.storage.local.set({ settings });
 }
