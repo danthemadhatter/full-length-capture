@@ -25,11 +25,20 @@
     SCROLLCAP_FRAME: "SCROLLCAP_FRAME", SCROLLCAP_RESET: "SCROLLCAP_RESET",
     SCROLLCAP_ENTER_PICK: "SCROLLCAP_ENTER_PICK",
     SCROLLCAP_PAUSE: "SCROLLCAP_PAUSE", SCROLLCAP_RESUME: "SCROLLCAP_RESUME", SCROLLCAP_STOP: "SCROLLCAP_STOP",
+    SCROLLCAP_AUTO_APPLY: "SCROLLCAP_AUTO_APPLY", SCROLLCAP_END_DETECTED: "SCROLLCAP_END_DETECTED",
   };
   const send = (m) => new Promise((r) => { try { chrome.runtime.sendMessage(m, (resp) => { void chrome.runtime.lastError; r(resp); }); } catch (e) { r(null); } });
 
+  const SPEEDS = {
+    slow: { ratio: 0.5, pause: 600 },
+    medium: { ratio: 0.65, pause: 400 },
+    fast: { ratio: 0.8, pause: 250 },
+  };
+  const END_DUP_STREAK = 8;
+
   let lockedEl = null;   // element to crop to, or null = whole viewport
-  let outline, timer, picking = false, busy = false;
+  let outline, timer, scrollTimer, picking = false, busy = false;
+  let autoEnabled = false, autoSpeed = "medium", dupStreak = 0, lastFrames = 0;
 
   // ---- region selection ----
   function autoRegion() {
@@ -81,6 +90,71 @@
     flashTimer = setTimeout(() => { if (outline) outline.style.display = "none"; }, ms || 1200);
   }
 
+  // ---- auto-scroll assist (optional; manual scroll still works) ----
+  function scrollTarget() {
+    if (lockedEl) return lockedEl;
+    return document.scrollingElement || document.documentElement;
+  }
+  function tryScrollStep(step) {
+    const el = scrollTarget();
+    if (!el) return;
+    try {
+      if (typeof el.scrollBy === "function") {
+        el.scrollBy({ top: step, left: 0, behavior: "instant" });
+        return;
+      }
+    } catch (e) {}
+    try {
+      const win = el.contentWindow || (el.tagName === "IFRAME" ? el.contentWindow : null);
+      if (win && typeof win.scrollBy === "function") {
+        win.scrollBy(0, step);
+        return;
+      }
+    } catch (e) {}
+    try {
+      const r = el.getBoundingClientRect ? el.getBoundingClientRect() : regionRect();
+      const cx = r.left + r.width / 2, cy = r.top + Math.min(r.height * 0.6, r.height - 8);
+      el.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true, cancelable: true, deltaMode: 0, deltaY: step, clientX: cx, clientY: cy,
+      }));
+    } catch (e) {}
+  }
+  function scrollStep() {
+    if (!autoEnabled || picking || busy) return;
+    const h = regionRect().height;
+    tryScrollStep(Math.max(40, Math.round(h * (SPEEDS[autoSpeed] || SPEEDS.medium).ratio)));
+  }
+  function startAutoScroll() {
+    stopAutoScroll();
+    dupStreak = 0;
+    const pause = (SPEEDS[autoSpeed] || SPEEDS.medium).pause;
+    scrollTimer = setInterval(scrollStep, pause);
+  }
+  function stopAutoScroll() {
+    clearInterval(scrollTimer);
+    scrollTimer = null;
+  }
+  function applyAutoScroll(enabled, speed) {
+    autoEnabled = !!enabled;
+    autoSpeed = SPEEDS[speed] ? speed : "medium";
+    dupStreak = 0;
+    if (autoEnabled) startAutoScroll();
+    else stopAutoScroll();
+  }
+  function noteCaptureResult(resp) {
+    if (!resp || !resp.ok) return;
+    if (resp.duplicate) {
+      dupStreak++;
+      if (autoEnabled && dupStreak >= END_DUP_STREAK) {
+        stopAutoScroll();
+        send({ type: MSG.SCROLLCAP_END_DETECTED });
+      }
+      return;
+    }
+    if (!resp.throttled && resp.frames > lastFrames) dupStreak = 0;
+    lastFrames = resp.frames;
+  }
+
   // ---- capture loop ----
   async function tick() {
     if (busy || picking) return;
@@ -90,7 +164,8 @@
     if (outline) outline.style.display = "none";
     try {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await send({ type: MSG.SCROLLCAP_FRAME, rect: regionRect(), innerWidth, innerHeight, dpr: window.devicePixelRatio || 1 });
+      const resp = await send({ type: MSG.SCROLLCAP_FRAME, rect: regionRect(), innerWidth, innerHeight, dpr: window.devicePixelRatio || 1 });
+      noteCaptureResult(resp);
     } finally {
       if (outWasShown && outline) outline.style.display = "block";
       busy = false;
@@ -139,6 +214,7 @@
   }
   function teardown() {
     clearInterval(timer);
+    stopAutoScroll();
     stopPick();
     if (outline && outline.parentNode) outline.remove();
     window.__flcScrollcap = false;
@@ -147,8 +223,12 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
     if (msg.type === MSG.SCROLLCAP_ENTER_PICK) startPick();
-    if (msg.type === MSG.SCROLLCAP_PAUSE) clearInterval(timer);
-    if (msg.type === MSG.SCROLLCAP_RESUME) timer = setInterval(tick, 360);
+    if (msg.type === MSG.SCROLLCAP_PAUSE) { clearInterval(timer); stopAutoScroll(); }
+    if (msg.type === MSG.SCROLLCAP_RESUME) {
+      timer = setInterval(tick, 360);
+      if (autoEnabled) startAutoScroll();
+    }
+    if (msg.type === MSG.SCROLLCAP_AUTO_APPLY) applyAutoScroll(msg.enabled, msg.speed);
     if (msg.type === MSG.SCROLLCAP_STOP) teardown();
   });
 

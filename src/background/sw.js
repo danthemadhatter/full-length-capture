@@ -72,10 +72,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (sender.tab) resetSession(sender.tab.id);
     return false;
   }
+  if (msg.type === MSG.SCROLLCAP_END_DETECTED) {
+    const tab = sender.tab;
+    if (tab) broadcast({ type: MSG.SCROLLCAP_END, tabId: tab.id });
+    return false;
+  }
 
   // ---- from the popup (a bare extension page — carries its own tabId) ----
   if (msg.type === MSG.SCROLLCAP_CHANGE_AREA) {
     chrome.tabs.sendMessage(msg.tabId, { type: MSG.SCROLLCAP_ENTER_PICK }, () => void chrome.runtime.lastError);
+    return false;
+  }
+  if (msg.type === MSG.SCROLLCAP_AUTO_SET) {
+    chrome.tabs.sendMessage(msg.tabId, {
+      type: MSG.SCROLLCAP_AUTO_APPLY,
+      enabled: !!msg.enabled,
+      speed: msg.speed || "medium",
+    }, () => void chrome.runtime.lastError);
     return false;
   }
   if (msg.type === MSG.SCROLLCAP_DONE) {

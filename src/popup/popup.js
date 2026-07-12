@@ -22,10 +22,19 @@ async function init() {
 
 const send = (msg) => chrome.runtime.sendMessage({ ...msg, tabId });
 
-function setStatus(text, isError) {
+function setStatus(text, isError, isEnd) {
   const el = $("status");
   el.textContent = text || "";
   el.classList.toggle("error", !!isError);
+  el.classList.toggle("end", !!isEnd);
+}
+
+function sendAuto() {
+  send({
+    type: MSG.SCROLLCAP_AUTO_SET,
+    enabled: $("auto").checked,
+    speed: $("speed").value,
+  });
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -37,7 +46,14 @@ chrome.runtime.onMessage.addListener((msg) => {
     $("done").textContent = "Done — make PDF";
     setStatus(msg.error || "Failed — try again", true);
   }
+  if (msg.type === MSG.SCROLLCAP_END) {
+    $("auto").checked = false;
+    setStatus("End detected — click Done", false, true);
+  }
 });
+
+$("auto").addEventListener("change", sendAuto);
+$("speed").addEventListener("change", () => { if ($("auto").checked) sendAuto(); });
 
 $("area").addEventListener("click", () => { send({ type: MSG.SCROLLCAP_CHANGE_AREA }); window.close(); });
 $("done").addEventListener("click", () => {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Full-Length Capture",
-  "version": "5.2.1",
+  "version": "5.3.0",
   "description": "Click the icon, scroll the page, get one seamless PDF. No page breaks, no debugger banner — just screenshots stitched into a single continuous page.",
   "permissions": ["downloads", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],

@@ -55,7 +55,7 @@ export async function captureFrame(tabId, windowId, meta) {
   const s = sessions.get(tabId);
   if (!s) return { ok: false, frames: 0 };
   const now = Date.now();
-  if (now - s.last < MIN_GAP_MS) return { ok: true, frames: s.frames.length };
+  if (now - s.last < MIN_GAP_MS) return { ok: true, frames: s.frames.length, throttled: true };
   s.last = now;
 
   let dataUrl;
@@ -65,7 +65,7 @@ export async function captureFrame(tabId, windowId, meta) {
   const bmp = await decodePng(stripDataUrl(dataUrl));
   const h = await aHash(bmp);
   bmp.close && bmp.close();
-  if (s.lastHash && hamming(s.lastHash, h) <= 2) return { ok: true, frames: s.frames.length }; // no change → skip
+  if (s.lastHash && hamming(s.lastHash, h) <= 2) return { ok: true, frames: s.frames.length, duplicate: true };
   s.lastHash = h;
   s.frames.push({ dataUrl, ...meta });
   return { ok: true, frames: s.frames.length };
